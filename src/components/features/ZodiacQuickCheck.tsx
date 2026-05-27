@@ -1,0 +1,1 @@
+export { ZodiacQuickCheck } from "./index";

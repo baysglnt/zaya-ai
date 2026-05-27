@@ -1,0 +1,258 @@
+// This is your Prisma schema file
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Gender {
+  FEMALE
+  MALE
+  OTHER
+}
+
+enum ReportType {
+  PERSONALITY
+  LOVE_LIFE
+  COMPATIBILITY
+  SOULMATE
+  FUTURE_SPOUSE
+  CAREER
+  WEALTH
+  YEARLY_2026
+  BREAKUP_RECOVERY
+  HIDDEN_DESTINY
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  EXPIRED
+  CANCELLED
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String?   @unique
+  emailVerified DateTime?
+  image         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Astrology profile
+  birthDate     DateTime?
+  birthTime     String?
+  birthCity     String?
+  gender        Gender?
+  zodiacSign    String?
+  chineseZodiac String?
+  auraColor     String?
+
+  // Gamification
+  streakCount   Int       @default(0)
+  lastCheckIn   DateTime?
+  luckyPoints   Int       @default(0)
+  referralCode  String?   @unique @default(cuid())
+  referredBy    String?
+
+  // Auth
+  accounts      Account[]
+  sessions      Session[]
+
+  // Reports & payments
+  reports       Report[]
+  payments      Payment[]
+  subscription  Subscription?
+
+  // Social
+  shareCards    ShareCard[]
+  referrals     User[]         @relation("Referrals", fields: [referredBy], references: [id])
+  referrer      User?          @relation("Referrals")
+
+  @@map("users")
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model Report {
+  id          String     @id @default(cuid())
+  userId      String
+  type        ReportType
+  content     Json       // Full AI-generated report
+  isPremium   Boolean    @default(false)
+  paymentId   String?
+  createdAt   DateTime   @default(now())
+  expiresAt   DateTime?
+
+  user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  payment     Payment?   @relation(fields: [paymentId], references: [id])
+
+  @@map("reports")
+}
+
+model CompatibilityReport {
+  id           String   @id @default(cuid())
+  userId       String
+  targetName   String
+  targetDate   DateTime
+  targetGender Gender
+  result       Json
+  isPremium    Boolean  @default(false)
+  createdAt    DateTime @default(now())
+
+  @@map("compatibility_reports")
+}
+
+model Payment {
+  id            String        @id @default(cuid())
+  userId        String
+  amount        Int           // in tugrugs
+  status        PaymentStatus @default(PENDING)
+  qpayInvoiceId String?       @unique
+  qpayQrCode    String?       @db.Text
+  description   String
+  reportType    ReportType?
+  paidAt        DateTime?
+  createdAt     DateTime      @default(now())
+
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reports Report[]
+
+  @@map("payments")
+}
+
+model Subscription {
+  id        String             @id @default(cuid())
+  userId    String             @unique
+  status    SubscriptionStatus @default(ACTIVE)
+  planName  String             @default("premium_monthly")
+  price     Int                @default(19900)
+  startDate DateTime           @default(now())
+  endDate   DateTime
+  paymentId String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("subscriptions")
+}
+
+model DailyContent {
+  id          String   @id @default(cuid())
+  date        DateTime @db.Date
+  zodiacSign  String
+  energy      String
+  prediction  String   @db.Text
+  luckyColor  String
+  luckyNumber Int
+  warnings    String?  @db.Text
+  loveAdvice  String?  @db.Text
+  createdAt   DateTime @default(now())
+
+  @@unique([date, zodiacSign])
+  @@map("daily_content")
+}
+
+model NewsArticle {
+  id          String   @id @default(cuid())
+  title       String
+  content     String   @db.Text
+  excerpt     String
+  category    String   // love, career, health, cosmic_events, viral, meme
+  zodiacSigns String[] // which signs this affects
+  imageUrl    String?
+  isViral     Boolean  @default(false)
+  viewCount   Int      @default(0)
+  shareCount  Int      @default(0)
+  publishedAt DateTime @default(now())
+  createdAt   DateTime @default(now())
+
+  @@map("news_articles")
+}
+
+model ShareCard {
+  id         String   @id @default(cuid())
+  userId     String
+  cardType   String   // aura, zodiac, compatibility, destiny, lucky
+  imageUrl   String?
+  data       Json
+  shareCount Int      @default(0)
+  createdAt  DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("share_cards")
+}
+
+model CosmicEvent {
+  id          String   @id @default(cuid())
+  name        String
+  description String   @db.Text
+  eventType   String   // full_moon, mercury_retrograde, eclipse, etc
+  startDate   DateTime
+  endDate     DateTime?
+  impact      Json     // impact by zodiac sign
+  isActive    Boolean  @default(false)
+
+  @@map("cosmic_events")
+}
+
+model CouponCode {
+  id          String    @id @default(cuid())
+  code        String    @unique
+  discount    Int       // percentage
+  maxUses     Int       @default(100)
+  usedCount   Int       @default(0)
+  expiresAt   DateTime?
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+
+  @@map("coupon_codes")
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
+}
